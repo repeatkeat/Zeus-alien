@@ -1,1 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ZEUS VS ALIEN - DEBUG BUILD</title>
+    <style>
+        body { margin: 0; padding: 0; background: #050714; color: white; overflow: hidden; font-family: sans-serif; }
+        /* Hard-code the height so the phone doesn't collapse it */
+        #game-container { width: 100vw; height: 70vh; background: #000; position: relative; }
+        #controls { height: 30vh; width: 100vw; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0a0a20; }
+        #status-box { font-size: 10px; color: #555; position: absolute; top: 5px; left: 5px; }
+        button { 
+            padding: 20px 50px; font-size: 25px; font-weight: bold; background: #ff0; color: #000; 
+            border: none; border-radius: 15px; box-shadow: 0 0 20px #ff0; cursor: pointer;
+        }
+        button:disabled { background: #333; box-shadow: none; }
+        .stat { font-size: 18px; margin-bottom: 10px; color: #0ff; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+
+    <div id="status-box">Status: Waiting for PIXI...</div>
+
+    <div id="game-container"></div>
+
+    <div id="controls">
+        <div class="stat">BAL: $<span id="balance">1000</span> | WIN: $<span id="win">0</span></div>
+        <button id="spinBtn">SPIN</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js"></script>
+
+    <script>
+    const status = document.getElementById('status-box');
+    
+    // 1. Check if PIXI loaded
+    if (typeof PIXI === 'undefined') {
+        status.innerHTML = "ERROR: PIXI.js failed to load from CDN. Check internet.";
+    } else {
+        status.innerHTML = "PIXI Loaded. Initializing Engine...";
+        initGame();
+    }
+
+    function initGame() {
+        const container = document.getElementById('game-container');
+        const app = new PIXI.Application({
+            width: window.innerWidth,
+            height: window.innerHeight * 0.7,
+            backgroundColor: 0x050714,
+            resizeTo: container
+        });
+        container.appendChild(app.view);
+
+        const ROWS=5, COLS=5, CELL=55, GAP=5;
+        let balance=1000, freeSpins=0, isRunning=false;
+        let stickyReels = {};
+        const symbols=["Z","A","L","L","L","W","S"];
+        const colors={Z:0xFFD700, A:0x00FFFF, L:0x444444, W:0xFFD700, S:0xFF00FF};
+
+        const reelContainer = new PIXI.Container();
+        app.stage.addChild(reelContainer);
+
+        let cells = [];
+        for(let c=0; c<COLS; c++) {
+            cells[c] = [];
+            for(let r=0; r<ROWS; r++) {
+                const holder = new PIXI.Container();
+                holder.x = c * (CELL + GAP);
+                holder.y = r * (CELL + GAP);
+                reelContainer.addChild(holder);
+                cells[c][r] = holder;
+            }
+        }
+
+        function centerGrid() {
+            reelContainer.x = (app.screen.width - reelContainer.width) / 2;
+            reelContainer.y = (app.screen.height - reelContainer.height) / 2;
+        }
+        centerGrid();
+
+        function draw(c, r, sym) {
+            const h = cells[c][r];
+            h.removeChildren();
+            const g = new PIXI.Graphics();
+            g.beginFill(colors[sym]).drawRoundedRect(0,0,CELL,CELL,8).endFill();
+            h.addChild(g);
+            const t = new PIXI.Text(sym, {fill: '#000', fontWeight: 'bold', fontSize: 24});
+            t.anchor.set(0.5); t.x=CELL/2; t.y=CELL/2;
+            h.addChild(t);
+        }
+
+        function randomize() {
+            for(let c=0; c<COLS; c++) {
+                for(let r=0; r<ROWS; r++) {
+                    const s = symbols[Math.floor(Math.random()*symbols.length)];
+                    draw(c, r, s);
+                }
+            }
+        }
+
+        randomize();
+        status.innerHTML = "Ready to Play.";
+
+        document.getElementById('spinBtn').onclick = async () => {
+            if(isRunning) return;
+            isRunning = true;
+            status.innerHTML = "Spinning...";
+            document.getElementById('spinBtn').disabled = true;
+            
+            // Animation loop
+            for(let i=0; i<10; i++) {
+                randomize();
+                await new Promise(r => setTimeout(r, 60));
+            }
+            
+            isRunning = false;
+            document.getElementById('spinBtn').disabled = false;
+            status.innerHTML = "Result In.";
+        };
+    }
+    </script>
+</body>
+</html>
 
