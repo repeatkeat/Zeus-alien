@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zeus vs Alien - FIXED BOOT</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+    body { margin:0; background: #050714; overflow:hidden; font-family: sans-serif; touch-action: none; width: 100vw; height: 100vh; }
+    canvas { display: block; }
+    #ui-layer { position: absolute; bottom: 30px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; z-index:100; pointer-events: none; }
+    #info { color:#fff; text-shadow: 0 0 10px #ff0; text-align: center; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 10px; border: 1px solid #ff3; width: 80%; pointer-events: auto; }
+    button { 
+        padding: 20px 60px; font-size: 24px; font-weight: 900; border-radius: 15px; 
+        border:none; background: #ff0; color:#000; pointer-events: auto;
+        box-shadow: 0 0 20px #ff0; cursor: pointer;
+    }
+    #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); z-index: 200; pointer-events: none; }
+    #overlay-text { font-size: 40px; color: gold; text-shadow: 0 0 20px #fff; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="overlay"><div id="overlay-text">WIN!</div></div>
+
+<div id="ui-layer">
+    <div id="info">
+        BAL: $<span id="balance">1000</span> | FREE: <span id="freespins">0</span><br>
+        WIN: $<span id="win">0</span>
+    </div>
+    <button id="spinBtn" onclick="processSpin()">SPIN</button>
+</div>
+
+<script src="https://pixijs.download/release/pixi.min.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    const ROWS=5, COLS=5, CELL=60, GAP=5, BET=10;
+    let balance=1000, freeSpins=0, isRunning=false;
+    let grid = [], cells = [], stickyReels = {}, particles = [];
+    const symbols=["Z","A","L","L","L","W","S"];
+    const colors={Z:0xFFD700, A:0x00FFFF, L:0x333333, W:0xFFD700, S:0xFF00FF};
+
+    const app = new PIXI.Application({
+        width: window.innerWidth, 
+        height: window.innerHeight, 
+        backgroundColor: 0x050714, 
+        resolution: window.devicePixelRatio || 1, 
+        autoDensity: true
+    });
+    document.body.appendChild(app.view);
+
+    const reelContainer = new PIXI.Container();
+    const particleContainer = new PIXI.Container();
+    app.stage.addChild(reelContainer, particleContainer);
+
+    function setupGrid() {
+        reelContainer.removeChildren();
+        for(let c=0; c<COLS; c++){
+            cells[c] = [];
+            for(let r=0; r<ROWS; r++){
+                const container = new PIXI.Container();
+                container.x = c * (CELL + GAP);
+                container.y = r * (CELL + GAP);
+                reelContainer.addChild(container);
+                cells[c][r] = container;
+            }
+        }
+        reelContainer.pivot.set(reelContainer.width/2, reelContainer.height/2);
+        reelContainer.x = app.screen.width / 2;
+        reelContainer.y = app.screen.height / 2.5;
+    }
+
+    function drawSymbol(c, r, symbol, isWin=false) {
+        const parent = cells[c][r];
+        parent.removeChildren();
+        const isSticky = stickyReels[c] !== undefined;
+        const sym = isSticky ? "W" : symbol;
+        const bg = new PIXI.Graphics();
+        bg.beginFill(isWin ? 0xffffff : colors[sym], isWin ? 0.7 : 1);
+        bg.drawRoundedRect(0, 0, CELL, CELL, 8);
+        if(isSticky) bg.lineStyle(3, 0xFFD700);
+        bg.endFill();
+        parent.addChild(bg);
+        const txt = new PIXI.Text(sym, { fontSize: isSticky ? 32 : 24, fontWeight: '900', fill: isSticky ? '#fff' : '#000' });
+        txt.anchor.set(0.5); txt.x = CELL/2; txt.y = CELL/2;
+        parent.addChild(txt);
+        if(isSticky && r === 0) {
+            const badge = new PIXI.Text(stickyReels[c]+'x', { fontSize: 16, fill: '#ff0', stroke: '#000', strokeThickness: 3 });
+            badge.y = -15; badge.x = CELL/2; badge.anchor.set(0.5);
+            parent.addChild(badge);
+        }
+    }
+
+    function randomizeGrid() {
+        grid = [];
+        for(let c=0; c<COLS; c++){
+            grid[c] = [];
+            let hasNewWild = false;
+            for(let r=0; r<ROWS; r++){
+                if(stickyReels[c]) grid[c][r] = "W";
+                else {
+                    let s = symbols[Math.floor(Math.random()*symbols.length)];
+                    grid[c][r] = s;
+                    if(s === "W" && freeSpins > 0) hasNewWild = true;
+                }
+            }
+            if(hasNewWild && !stickyReels[c]) stickyReels[c] = Math.floor(Math.random() * 99) + 2;
+        }
+        for(let c=0; c<COLS; c++) for(let r=0; r<ROWS; r++) drawSymbol(c, r, grid[c][r]);
+    }
+
+    window.processSpin = async function() {
+        if(isRunning) return;
+        isRunning = true;
+        document.getElementById("spinBtn").disabled = true;
+        if(freeSpins > 0) freeSpins--;
+        else { balance -= BET; stickyReels = {}; }
+        updateUI();
+        for(let i=0; i<12; i++) { randomizeGrid(); await new Promise(r=>setTimeout(r, 50)); }
+        await evaluateBoard();
+    }
+
+    async function evaluateBoard() {
+        let winAmount = 0, winningCells = [];
+        ["Z","A","L"].forEach(sym => {
+            let lineMult = 1, combo = 0, tempWinning = [];
+            for(let c=0; c<COLS; c++) {
+                let matches = [];
+                for(let r=0; r<ROWS; r++) if(grid[c][r] === sym || grid[c][r] === "W") matches.push([c,r]);
+                if(matches.length === 0) break;
+                if(stickyReels[c]) lineMult *= stickyReels[c];
+                combo++; tempWinning.push(...matches);
+            }
+            if(combo >= 3) { winAmount += (combo * 5) * lineMult; winningCells.push(...tempWinning); }
+        });
+        if(grid.flat().filter(s=>s==="S").length >= 3) freeSpins += 10;
+        if(winAmount > 0) {
+            winningCells.forEach(coord => drawSymbol(coord[0], coord[1], grid[coord[0]][coord[1]], true));
+            balance += winAmount;
+            document.getElementById("win").textContent = winAmount.toLocaleString();
+            if(winAmount >= BET*50) triggerCelebration(winAmount);
+        }
+        updateUI();
+        setTimeout(() => {
+            if(freeSpins > 0) window.processSpin(); 
+            else { isRunning = false; document.getElementById("spinBtn").disabled = false; }
+        }, winAmount > 0 ? 2000 : 500);
+    }
+
+    function triggerCelebration(amt) {
+        const ov = document.getElementById("overlay");
+        document.getElementById("overlay-text").textContent = amt >= BET*100 ? "HUGE WIN!" : "BIG WIN!";
+        ov.style.display = 'flex';
+        setTimeout(() => { ov.style.display = 'none'; }, 2000);
+    }
+
+    function updateUI() {
+        document.getElementById("balance").textContent = balance.toLocaleString();
+        document.getElementById("freespins").textContent = freeSpins;
+    }
+
+    window.addEventListener('resize', () => { app.renderer.resize(window.innerWidth, window.innerHeight); setupGrid(); randomizeGrid(); });
+    setupGrid(); randomizeGrid();
+});
+</script>
+</body>
+</html>
