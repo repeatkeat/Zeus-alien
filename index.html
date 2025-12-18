@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ZEUS SLOT - MOBILE FIX</title>
+    <style>
+        body, html { margin: 0; padding: 0; background: #050714; width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+        /* Force the game area to be visible */
+        #game-container { flex: 1; width: 100vw; background: #000; position: relative; display: block !important; min-height: 300px; }
+        canvas { display: block !important; width: 100% !important; height: 100% !important; }
+        #controls { height: 180px; width: 100vw; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #050714; z-index: 100; border-top: 1px solid #333; }
+        #info { color:#fff; text-align: center; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 10px; border: 1px solid #ff3; width: 85%; margin-bottom: 15px; font-family: sans-serif; }
+        button { padding: 15px 60px; font-size: 28px; font-weight: 900; border-radius: 15px; border:none; background: #ff0; color:#000; box-shadow: 0 0 20px #ff0; cursor: pointer; font-family: sans-serif; }
+        button:active { transform: scale(0.95); }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+
+    <div id="controls">
+        <div id="info">
+            BAL: $<span id="balance">1000</span> | FREE: <span id="freespins">0</span><br>
+            WIN: $<span id="win">0</span>
+        </div>
+        <button id="spinBtn" onclick="window.processSpin()">SPIN</button>
+    </div>
+
+    <script src="https://pixijs.download/v7.3.2/pixi.min.js"></script>
+
+    <script>
+    let app, reelContainer, cells = [];
+    const ROWS=5, COLS=5, CELL=55, GAP=6;
+    let balance=1000, freeSpins=0, isRunning=false;
+    const symbols=["Z","A","L","L","L","W","S"];
+    const colors={Z:0xFFD700, A:0x00FFFF, L:0x444444, W:0xFFD700, S:0xFF00FF};
+
+    async function init() {
+        const container = document.getElementById('game-container');
+        
+        app = new PIXI.Application({
+            resizeTo: container,
+            backgroundColor: 0x050714,
+            resolution: window.devicePixelRatio || 1,
+            autoDensity: true,
+            antialias: true
+        });
+        container.appendChild(app.view);
+
+        reelContainer = new PIXI.Container();
+        app.stage.addChild(reelContainer);
+
+        // Build Grid
+        for(let c=0; c<COLS; c++){
+            cells[c] = [];
+            for(let r=0; r<ROWS; r++){
+                const h = new PIXI.Container();
+                h.x = c * (CELL + GAP);
+                h.y = r * (CELL + GAP);
+                reelContainer.addChild(h);
+                cells[c][r] = h;
+            }
+        }
+
+        const center = () => {
+            reelContainer.pivot.set(reelContainer.width/2, reelContainer.height/2);
+            reelContainer.x = app.screen.width / 2;
+            reelContainer.y = app.screen.height / 2;
+        };
+
+        app.ticker.add(center); // Keep it centered
+        randomize();
+    }
+
+    function drawSym(c, r, sym) {
+        const h = cells[c][r];
+        h.removeChildren();
+        const g = new PIXI.Graphics();
+        g.beginFill(colors[sym]).drawRoundedRect(0,0,CELL,CELL,10).endFill();
+        h.addChild(g);
+        const t = new PIXI.Text(sym, {fill: '#000', fontWeight: '900', fontSize: 26});
+        t.anchor.set(0.5); t.x=CELL/2; t.y=CELL/2;
+        h.addChild(t);
+    }
+
+    function randomize() {
+        for(let c=0; c<COLS; c++) 
+            for(let r=0; r<ROWS; r++) 
+                drawSym(c, r, symbols[Math.floor(Math.random()*symbols.length)]);
+    }
+
+    window.processSpin = async function() {
+        if(isRunning) return;
+        isRunning = true;
+        document.getElementById('spinBtn').style.opacity = "0.5";
+        
+        for(let i=0; i<15; i++) {
+            randomize();
+            await new Promise(r => setTimeout(r, 60));
+        }
+        
+        isRunning = false;
+        document.getElementById('spinBtn').style.opacity = "1";
+    };
+
+    // Start
+    window.onload = init;
+    </script>
+</body>
+</html>
